@@ -1,56 +1,71 @@
-resource "google_storage_bucket" "storage_bucket" {
-
-  name          = var.name
-  force_destroy = var.force_destroy
-  location      = var.location
-  project       = var.project
-  storage_class = var.storage_class
-  lifecycle_rule {
-    action {
-      type          = var.lra_type # lifecycle_rule_action
-      storage_class = var.lra_storage_class
+#### Terraform Resource Block To Create a GCS Bucket #####
+resource "google_storage_bucket" "bucket" {
+  count                       = var.no_of_buckets
+  name                        = var.name_of_buckets[count.index]
+  force_destroy               = var.force_destroy
+  location                    = var.location
+  project                     = var.project_id
+  storage_class               = var.storage_class
+  labels                      = var.labels
+  uniform_bucket_level_access = var.uniform_bucket_level_access
+  lifecycle {
+    ignore_changes = [
+      labels
+    ]
+  }
+  dynamic "lifecycle_rule" {
+    for_each = var.lifecycle_rule
+    content {
+      action {
+        type          = lifecycle_rule.value.action.type
+        storage_class = lookup(lifecycle_rule.value.action, "storage_class", null)
+      }
+      condition {
+        age                        = lookup(lifecycle_rule.value.condition, "age", null)
+        created_before             = lookup(lifecycle_rule.value.condition, "created_before", null)
+        with_state                 = lookup(lifecycle_rule.value.condition, "with_state", lookup(lifecycle_rule.value.condition, "is_live", false) ? "LIVE" : null)
+        matches_storage_class      = lookup(lifecycle_rule.value.condition, "matches_storage_class", null)
+        num_newer_versions         = lookup(lifecycle_rule.value.condition, "num_newer_versions", null)
+        custom_time_before         = lookup(lifecycle_rule.value.condition, "custom_time_before", null)
+        days_since_custom_time     = lookup(lifecycle_rule.value.condition, "days_since_custom_time", null)
+        days_since_noncurrent_time = lookup(lifecycle_rule.value.condition, "days_since_noncurrent_time", null)
+        noncurrent_time_before     = lookup(lifecycle_rule.value.condition, "noncurrent_time_before", null)
+      }
     }
-    condition {
-      age                    = var.lrc_age   #lifecycle_rule_condation
-      created_before         = var.lrc_created_before
-      with_state             = var.lrc_with_state
-      matches_storage_class  = var.lrc_matches_storage_class
-      num_newer_versions     = var.lrc_num_newer_versions
-      custom_time_before     = var.lrc_custom_time_before
-      days_since_custom_time = var.lrc_days_since_custom_time
-      noncurrent_time_before = var.lrc_noncurrent_time_before
-
-    }
-
   }
   versioning {
-    enabled = var.versioning_enabled
+    enabled = var.bucket_object_versioning
   }
-  website {
-    main_page_suffix = var.website_main_page_suffix
-    not_found_page   = var.website_not_found_page
 
+  dynamic "cors" {
+    for_each = var.cors == null ? [] : var.cors
+    content {
+      origin          = lookup(cors.value, "origin", null)
+      method          = lookup(cors.value, "method", null)
+      response_header = lookup(cors.value, "response_header", null)
+      max_age_seconds = lookup(cors.value, "max_age_seconds", null)
+    }
   }
-  # cors {
-  #   origin          = var.cors_origin
-  #   method          = var.cors_method
-  #   response_header = var.cors_response_header
-  #   max_age_seconds = var.cors_max_age_seconds
-  # }
-  retention_policy {
-    is_locked        = var.retention_policy_is_locked
-    retention_period = var.retention_policy_retention_period
+
+  dynamic "retention_policy" {
+    for_each = var.retention_policy == null ? [] : [var.retention_policy]
+    content {
+      is_locked        = var.retention_policy.is_locked
+      retention_period = var.retention_policy.retention_period
+    }
   }
-  # labels = var.labels
-  # logging {
-  #   log_bucket        = var.logging_log_bucket
-  #   log_object_prefix = var.logging_log_object_prefix
-  # }
-  # encryption {
-  #   default_kms_key_name = var.encryption_default_kms_key_name
-  # }
-  requester_pays              = var.requester_pays
-  uniform_bucket_level_access = var.uniform_bucket_level_access
 
-
+  dynamic "logging" {
+    for_each = var.log_object_bucket == null ? [] : [var.log_object_bucket]
+    content {
+      log_bucket        = var.log_object_bucket
+      log_object_prefix = var.log_object_prefix
+    }
+  }
+  dynamic "encryption" {
+    for_each = var.encryption == null ? [] : [var.encryption]
+    content {
+      default_kms_key_name = var.encryption.kms_key_name
+    }
+  }
 }
